@@ -1,0 +1,47 @@
+manifest_version: 2
+type: DCM_PROJECT
+default_target: 'DEV'
+
+targets:
+  DEV:
+    account_identifier: SFSENORTHAMERICA-DEMO462
+    project_name: 'CODE_DB.DCM.DARK_STAR_PROJECT_DEV'
+    project_owner: ACCOUNTADMIN
+    templating_config: 'DEV'
+  TEST:
+    account_identifier: SFSENORTHAMERICA-DEMO462
+    project_name: 'CODE_DB.DCM.DARK_STAR_PROJECT_TEST'
+    project_owner: ACCOUNTADMIN
+    templating_config: 'TEST'
+  PROD:
+    account_identifier: SFSENORTHAMERICA-DEMO462
+    project_name: 'CODE_DB.DCM.DARK_STAR_PROJECT_PROD'
+    project_owner: ACCOUNTADMIN
+    templating_config: 'PROD'
+
+templating:
+  defaults:
+    env: 'DEV'
+    db_name: 'DARK_STAR_DEV'
+    wh_size: 'XSMALL'
+    wh_auto_suspend: 60
+    retention_days: 1
+  configurations:
+    DEV:
+      env: 'DEV'
+      db_name: 'DARK_STAR_DEV'
+      wh_size: 'XSMALL'
+      wh_auto_suspend: 60
+      retention_days: 1
+    TEST:
+      env: 'TEST'
+      db_name: 'DARK_STAR_TEST'
+      wh_size: 'SMALL'
+      wh_auto_suspend: 120
+      retention_days: 3
+    PROD:
+      env: 'PROD'
+      db_name: 'DARK_STAR_PROD'
+      wh_size: 'MEDIUM'
+      wh_auto_suspend: 300
+      retention_days: 7

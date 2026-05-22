@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dark Star Electronics — Snowflake Foundation: What We've Built</title>
+<style>
+  :root {
+    --snow-blue:    #29B5E8;
+    --snow-navy:    #11567F;
+    --snow-dark:    #0B2A3F;
+    --snow-mid:     #1B3A52;
+    --bg:           #0B1622;
+    --panel:        #142536;
+    --panel-2:      #18324A;
+    --border:       #244761;
+    --text:         #E5EEF5;
+    --text-dim:     #A8B8C8;
+    --accent:       #29B5E8;
+    --accent-2:     #7AD9F5;
+    --green:        #4CD7A0;
+    --amber:        #F5B342;
+    --red:          #F26D7D;
+    --shadow:       0 8px 24px rgba(0,0,0,0.35);
+    --radius:       12px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif;
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(41,181,232,0.12), transparent 60%),
+      radial-gradient(900px 500px at -10% 40%, rgba(122,217,245,0.08), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent-2); }
+
+  /* ---------- header ---------- */
+  header {
+    padding: 64px 32px 56px;
+    text-align: center;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(41,181,232,0.06), transparent);
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 3px;
+    font-size: 12px;
+    color: var(--accent);
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+  header h1 {
+    margin: 0 0 12px;
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    background: linear-gradient(90deg, #fff 0%, var(--accent-2) 60%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p.subtitle {
+    margin: 0 auto;
+    max-width: 720px;
+    color: var(--text-dim);
+    font-size: 17px;
+  }
+  .meta {
+    margin-top: 22px;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .badge {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--accent-2);
+    padding: 6px 14px;
+    border-radius: 999px;
+    font-size: 12px;
+    letter-spacing: 0.5px;
+  }
+
+  /* ---------- layout ---------- */
+  main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 56px 32px 80px;
+  }
+  section { margin-bottom: 56px; }
+  h2 {
+    font-size: 26px;
+    margin: 0 0 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  h2 .num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--snow-blue), var(--snow-navy));
+    color: #fff;
+    font-size: 14px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+  h3 { font-size: 17px; margin: 20px 0 8px; color: var(--accent-2); }
+  p { color: var(--text); }
+  p.dim { color: var(--text-dim); }
+  ul { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    background: rgba(41,181,232,0.10);
+    color: var(--accent-2);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+  pre {
+    background: #0A1A2A;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 16px 18px;
+    border-radius: var(--radius);
+    overflow-x: auto;
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    box-shadow: var(--shadow);
+  }
+  pre code { background: transparent; padding: 0; color: inherit; }
+
+  /* ---------- step card ---------- */
+  .step {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px 26px;
+    box-shadow: var(--shadow);
+  }
+  .why {
+    border-left: 3px solid var(--accent);
+    padding: 10px 14px;
+    background: rgba(41,181,232,0.06);
+    border-radius: 0 6px 6px 0;
+    color: var(--text-dim);
+    margin: 12px 0 16px;
+    font-size: 14.5px;
+  }
+  .why strong { color: var(--accent-2); }
+
+  /* ---------- tables ---------- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px;
+    background: var(--panel-2);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+  th, td {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: var(--snow-mid);
+    color: var(--accent-2);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-size: 11px;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.ok    { color: var(--green); font-weight: 600; }
+  td.alter { color: var(--amber); font-weight: 600; }
+  td.del   { color: var(--red);   font-weight: 600; }
+
+  /* ---------- stat row ---------- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .stat {
+    background: linear-gradient(135deg, var(--panel-2), var(--panel));
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    text-align: center;
+    box-shadow: var(--shadow);
+  }
+  .stat .n {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+  .stat .l {
+    margin-top: 6px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--text-dim);
+  }
+
+  /* ---------- diagram ---------- */
+  .diagram {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-top: 16px;
+  }
+  .env {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 18px;
+    text-align: center;
+  }
+  .env .head {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+  .env .db {
+    font-size: 16px;
+    margin: 8px 0 4px;
+    font-family: "SF Mono", Menlo, monospace;
+    color: var(--text);
+  }
+  .env .wh {
+    font-size: 12px;
+    color: var(--text-dim);
+  }
+
+  footer {
+    text-align: center;
+    padding: 32px 24px 56px;
+    color: var(--text-dim);
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+  }
+  footer .logo { color: var(--accent); font-weight: 700; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Implementation Recap • Snowflake DCM</div>
+  <h1>Dark Star Electronics</h1>
+  <p class="subtitle">A step-by-step record of how we stood up a production-grade Snowflake foundation
+    using Database Change Management (DCM) — version-controlled, multi-environment, and persona-secured.</p>
+  <div class="meta">
+    <span class="badge">Snowflake CLI 3.18.0</span>
+    <span class="badge">DCM Manifest v2</span>
+    <span class="badge">DEV / TEST / PROD</span>
+    <span class="badge">Release v0.1.0</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">★</span>At a Glance</h2>
+    <div class="stats">
+      <div class="stat"><div class="n">3</div><div class="l">Environments</div></div>
+      <div class="stat"><div class="n">24</div><div class="l">Entities / env</div></div>
+      <div class="stat"><div class="n">5</div><div class="l">Personas</div></div>
+      <div class="stat"><div class="n">8</div><div class="l">Dim + Fact tables</div></div>
+      <div class="stat"><div class="n">0</div><div class="l">Manual SQL</div></div>
+    </div>
+    <p class="dim">Everything below was authored as code in this repo and applied to Snowflake exclusively
+      through <code>snow dcm</code> — no clicking, no ad-hoc SQL.</p>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">1</span>Project Kickoff &amp; Requirements</h2>
+    <div class="step">
+      <p><strong>What:</strong> Defined the goal — a Snowflake-best-practice foundation for a fictional
+        electronics retailer (Dark Star Electronics).</p>
+      <div class="why"><strong>Why:</strong> A clean foundation makes everything downstream
+        (loaders, dbt models, BI, AI) cheaper and safer. Doing it as code in Git means we can
+        review changes, roll back, and stamp releases.</div>
+
+      <h3>Non-negotiables</h3>
+      <ul>
+        <li>Deployable to <strong>DEV, TEST, PROD</strong> from one codebase</li>
+        <li><strong>Persona roles</strong> per environment</li>
+        <li>A starter <strong>retail star schema</strong> (dimensions + facts)</li>
+        <li>Path to <strong>GitHub-driven CI/CD</strong> (deferred to a follow-up)</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">2</span>DCM Project Registration</h2>
+    <div class="step">
+      <p><strong>What:</strong> Registered three DCM project objects in Snowflake — one per environment.</p>
+      <div class="why"><strong>Why:</strong> Each environment needs its own DCM project so deployments
+        can't accidentally overwrite each other. The DCM project is the Snowflake-side anchor that
+        tracks deployed state and history.</div>
+      <pre><code>snow dcm create CODE_DB.DCM.DARK_STAR_PROJECT_DEV  -c kb_demo
+snow dcm create CODE_DB.DCM.DARK_STAR_PROJECT_TEST -c kb_demo
+snow dcm create CODE_DB.DCM.DARK_STAR_PROJECT_PROD -c kb_demo</code></pre>
+      <p class="dim">Initial location was <code>SANDBOX.KB</code>; relocated to <code>CODE_DB.DCM</code>
+        (a curated home for DCM projects) once the layout was clearer.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">3</span>Repository Scaffolding</h2>
+    <div class="step">
+      <p><strong>What:</strong> Created the canonical DCM project layout in this repo.</p>
+      <div class="why"><strong>Why:</strong> A predictable structure makes onboarding fast and
+        helps the DCM CLI auto-discover definitions and macros.</div>
+<pre><code>DarkStarElectronics/
+├── manifest.yml
+├── README.md
+├── .gitignore
+├── docs/
+│   ├── development_log.md
+│   └── html/
+│       └── implementation_recap.html
+└── sources/
+    ├── definitions/
+    │   ├── 00_infrastructure.sql
+    │   ├── 10_access.sql
+    │   ├── 20_dimensions.sql
+    │   ├── 30_facts.sql
+    │   └── 40_views.sql
+    └── macros/
+        └── persona_grants.sql</code></pre>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">4</span>Multi-Environment Manifest with Jinja</h2>
+    <div class="step">
+      <p><strong>What:</strong> Authored <code>manifest.yml</code> with three targets and a
+        <code>templating</code> block so one set of <code>DEFINE</code> statements becomes
+        three real environments.</p>
+      <div class="why"><strong>Why:</strong> Eliminates copy-paste drift between envs and lets us
+        tune per-env knobs (warehouse size, retention) in one place.</div>
+
+      <div class="diagram">
+        <div class="env">
+          <div class="head">DEV</div>
+          <div class="db">DARK_STAR_DEV</div>
+          <div class="wh">XSMALL · 1 day retention</div>
+        </div>
+        <div class="env">
+          <div class="head">TEST</div>
+          <div class="db">DARK_STAR_TEST</div>
+          <div class="wh">SMALL · 3 day retention</div>
+        </div>
+        <div class="env">
+          <div class="head">PROD</div>
+          <div class="db">DARK_STAR_PROD</div>
+          <div class="wh">MEDIUM · 7 day retention</div>
+        </div>
+      </div>
+
+      <h3>Template variables in play</h3>
+      <ul>
+        <li><code>{{ db_name }}</code> — environment database</li>
+        <li><code>{{ env }}</code> — environment short name</li>
+        <li><code>{{ wh_size }}</code>, <code>{{ wh_auto_suspend }}</code> — compute sizing</li>
+        <li><code>{{ retention_days }}</code> — Time Travel retention</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">5</span>Infrastructure Definitions</h2>
+    <div class="step">
+      <p><strong>What:</strong> One database, four schemas, one warehouse — defined declaratively
+        via <code>DEFINE</code> (not <code>CREATE</code>).</p>
+      <div class="why"><strong>Why:</strong> <code>DEFINE</code> is idempotent — DCM diffs the
+        desired state against Snowflake and only emits the deltas. Re-running a deploy is a no-op.</div>
+
+      <table>
+        <thead><tr><th>Schema</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td><code>RAW</code></td><td>Landing zone for source data</td></tr>
+          <tr><td><code>STAGING</code></td><td>Cleansed / conformed data</td></tr>
+          <tr><td><code>ANALYTICS</code></td><td>Star schema (dims + facts)</td></tr>
+          <tr><td><code>SERVE</code></td><td>BI-friendly views</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">6</span>Persona-Based Access Control</h2>
+    <div class="step">
+      <p><strong>What:</strong> Five database roles per environment, plus one account role for warehouse
+        access. Wired into <code>SYSADMIN</code>.</p>
+      <div class="why"><strong>Why:</strong> Database roles are scoped to the database lifecycle —
+        when DEV is dropped, its roles go with it. A separate account role holds warehouse
+        <code>USAGE</code> because, by Snowflake design, database roles cannot.</div>
+
+      <table>
+        <thead><tr><th>Role</th><th>Type</th><th>Capabilities</th></tr></thead>
+        <tbody>
+          <tr><td><code>ADMIN</code></td><td>DB role</td><td>Full DDL + DML</td></tr>
+          <tr><td><code>ENGINEER</code></td><td>DB role</td><td>Read all + write to RAW/STAGING/ANALYTICS</td></tr>
+          <tr><td><code>ANALYST</code></td><td>DB role</td><td>Read-only on SERVE/ANALYTICS</td></tr>
+          <tr><td><code>LOADER</code></td><td>DB role</td><td>Service: write to RAW only</td></tr>
+          <tr><td><code>DATA_SCIENTIST</code></td><td>DB role</td><td>Read all + CREATE in ANALYTICS</td></tr>
+          <tr><td><code>DARK_STAR_&lt;ENV&gt;_WAREHOUSE_USER</code></td><td>Account role</td><td>USAGE on env warehouse</td></tr>
+        </tbody>
+      </table>
+      <p class="dim">A reusable Jinja macro <code>grant_persona_access(db, schema)</code> fans out
+        per-schema USAGE/SELECT grants so the four schemas don't repeat themselves in code.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">7</span>Retail Star Schema</h2>
+    <div class="step">
+      <p><strong>What:</strong> A starter dim/fact model in <code>ANALYTICS</code>, plus consumption
+        views in <code>SERVE</code>.</p>
+      <div class="why"><strong>Why:</strong> Gives the team an immediately-queryable shape that
+        matches how electronics retailers actually report — sales, returns, and inventory anchored
+        to common dimensions.</div>
+
+      <h3>Dimensions</h3>
+      <ul>
+        <li><code>DIM_DATE</code> — full date dimension</li>
+        <li><code>DIM_CUSTOMER</code> — SCD2-ready customer master</li>
+        <li><code>DIM_PRODUCT</code> — SKU / category / brand / pricing</li>
+        <li><code>DIM_STORE</code> — physical, online, and outlet channels</li>
+        <li><code>DIM_EMPLOYEE</code> — sales associates, linked to a store</li>
+      </ul>
+
+      <h3>Facts</h3>
+      <ul>
+        <li><code>FACT_SALES</code> — order-line grain, change-tracked</li>
+        <li><code>FACT_INVENTORY</code> — daily snapshot per product/store</li>
+        <li><code>FACT_RETURNS</code> — links back to <code>FACT_SALES</code></li>
+      </ul>
+
+      <h3>Serve-layer views</h3>
+      <ul>
+        <li><code>VW_DAILY_SALES</code> — store × product × day rollup</li>
+        <li><code>VW_PRODUCT_PERFORMANCE</code> — lifetime sell / return / refund</li>
+        <li><code>VW_INVENTORY_SNAPSHOT</code> — current stock position</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">8</span>Validate &amp; Plan</h2>
+    <div class="step">
+      <p><strong>What:</strong> Static analysis, then a dry-run plan, before touching live infrastructure.</p>
+      <div class="why"><strong>Why:</strong> Catch syntax errors, missing dependencies, and
+        unexpected drops <em>before</em> they hit Snowflake.</div>
+<pre><code>snow dcm raw-analyze CODE_DB.DCM.DARK_STAR_PROJECT_DEV -c kb_demo --target DEV
+snow dcm plan        CODE_DB.DCM.DARK_STAR_PROJECT_DEV -c kb_demo --target DEV --save-output</code></pre>
+      <p>Result: analyze passed clean; plan reported 23 CREATEs + 1 ALTER (SYSADMIN) + 0 DROPs per env.</p>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">9</span>Deployment to All Three Environments</h2>
+    <div class="step">
+      <p><strong>What:</strong> Tagged the deployment <code>v0.1.0</code> and rolled out to
+        DEV → TEST → PROD.</p>
+      <div class="why"><strong>Why:</strong> Aliases give us a clean audit trail and a roll-back
+        target. Promoting in order (DEV → TEST → PROD) is best-practice and lets us spot env-specific
+        issues early.</div>
+<pre><code>snow dcm deploy CODE_DB.DCM.DARK_STAR_PROJECT_DEV  --target DEV  --alias v0.1.0
+snow dcm deploy CODE_DB.DCM.DARK_STAR_PROJECT_TEST --target TEST --alias v0.1.0
+snow dcm deploy CODE_DB.DCM.DARK_STAR_PROJECT_PROD --target PROD --alias v0.1.0</code></pre>
+
+      <table>
+        <thead><tr><th>Env</th><th>Database</th><th>Warehouse</th><th>Created</th><th>Altered</th><th>Dropped</th></tr></thead>
+        <tbody>
+          <tr><td>DEV</td><td><code>DARK_STAR_DEV</code></td><td><code>DARK_STAR_DEV_WH</code></td><td class="ok">23</td><td class="alter">1</td><td>0</td></tr>
+          <tr><td>TEST</td><td><code>DARK_STAR_TEST</code></td><td><code>DARK_STAR_TEST_WH</code></td><td class="ok">23</td><td class="alter">1</td><td>0</td></tr>
+          <tr><td>PROD</td><td><code>DARK_STAR_PROD</code></td><td><code>DARK_STAR_PROD_WH</code></td><td class="ok">23</td><td class="alter">1</td><td>0</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">10</span>Operational Hygiene</h2>
+    <div class="step">
+      <ul>
+        <li><strong>Development log</strong> — every change goes into <code>docs/development_log.md</code>
+          with task / why / outcome / decisions, so context survives any reset.</li>
+        <li><strong>Manifest schema warning</strong> suppressed via
+          <code># yaml-language-server: $schema=</code> (VS Code was matching against the
+          Native App manifest schema).</li>
+        <li><strong>.gitignore</strong> excludes DCM build output (<code>out/</code>, <code>output/</code>)
+          and OS junk.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
+    <h2><span class="num">→</span>Next Up</h2>
+    <div class="step">
+      <ul>
+        <li>Drop orphaned <code>SANDBOX.KB.DARK_STAR_PROJECT_*</code> objects.</li>
+        <li><strong>GitHub integration</strong> — Snowflake <code>GIT REPOSITORY</code> object,
+          GitHub Actions, or both.</li>
+        <li>Seed sample data (Snowpark / <code>COPY INTO</code> from a public stage).</li>
+        <li>Add <strong>dynamic tables</strong> for STAGING → ANALYTICS transformations.</li>
+        <li>Attach <strong>data quality expectations</strong> (DMFs) to fact-table critical columns.</li>
+        <li>Provision users + assign persona roles per env.</li>
+        <li>Tag-based <strong>masking policies</strong> on PII columns
+          (<code>DIM_CUSTOMER</code>, <code>DIM_EMPLOYEE</code>).</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div><span class="logo">DARK STAR ELECTRONICS</span> · Snowflake DCM Foundation · Release v0.1.0</div>
+  <div style="margin-top:6px">Generated from <code>docs/development_log.md</code></div>
+</footer>
+
+</body>
+</html>
