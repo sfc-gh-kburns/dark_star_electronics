@@ -176,14 +176,56 @@ Verify the workflow:
 
 ---
 
+## 2026-05-22 — Production-grade GitHub Actions CI/CD
+
+**Task:** Replace the single read-only PR-plan workflow with a full pipeline: `main` → DEV → TEST → **approved PROD** + nightly drift detection. Move auth from interactive password to per-env service users with RSA key-pair JWT.
+
+**Why:** Manual deploys don't scale, and a shared password to ACCOUNTADMIN is unacceptable for PROD. Per-env service users + GitHub Environments give us least-privilege blast radius isolation, an explicit approval gate for PROD, and a paper trail (`--alias ci-<sha>`) tying every deployed change to a commit. Drift detection catches out-of-band SQL.
+
+**How:**
+- Snowflake-side: created `DCM_DEPLOYER_{DEV,TEST,PROD}` (TYPE=SERVICE) + matching `_ROLE` for each. Granted ownership of the per-env database, warehouse, schemas, tables, views, database roles, the `DARK_STAR_<ENV>_WAREHOUSE_USER` account role, plus `CREATE ROLE ON ACCOUNT` (DCM emits role grants to SYSADMIN). Granted `SYSADMIN` to the deployer roles so they can grant to it transitively.
+- Generated three 2048-bit RSA key-pairs into `keys/` (gitignored). Registered public keys via `ALTER USER ... SET RSA_PUBLIC_KEY = ...`.
+- Smoke-tested all three: `snow dcm plan` succeeded with `--authenticator SNOWFLAKE_JWT`.
+- Workflows added/updated under `.github/workflows/`:
+  - `dcm_plan.yml` — PR-only matrix plan (DEV/TEST/PROD) with JWT auth + PR comment summary (CREATE/ALTER/DROP counts).
+  - `dcm_deploy_dev.yml` — `push: main`, `environment: dev`.
+  - `dcm_deploy_test.yml` — `workflow_run` of DEV success, `environment: test`.
+  - `dcm_deploy_prod.yml` — `workflow_run` of TEST success, **`environment: prod` (required reviewer)**.
+  - `dcm_drift.yml` — daily 09:00 UTC, fails + opens an issue if any env's plan is non-empty.
+- Wrote `docs/cicd_setup.md` with paste-ready GitHub UI instructions (Environments, secrets, branch protection).
+
+**Outcome:**
+- All three deployer users authenticate and successfully run `snow dcm plan` end-to-end.
+- Five workflow files committed locally; pipeline becomes live once GitHub-side secrets/Environments/branch protection are configured per `docs/cicd_setup.md`.
+- Both initial-deploy hiccups discovered during smoke-test were resolved in-line (warehouse-user account-role ownership, `CREATE ROLE ON ACCOUNT` privilege, db-role-by-db-role ownership transfer).
+
+**Notes / Decisions:**
+- **SYSADMIN inheritance** for deployer roles is intentional pragmatism — `access.sql` grants the env ADMIN db role to SYSADMIN, which requires the deployer to either own SYSADMIN or have it as a parent. We chose parent-of-deployer (one-way; no cycle) so deploys idempotently re-grant.
+- **Key-pair only** — `TYPE = SERVICE` blocks interactive password login on these users.
+- PROD's required-reviewer gate is enforced by GitHub at the **Environment** level, not the workflow file. Even if someone tampers with the workflow YAML, the gate can't be removed without repo Settings access.
+- Drift workflow uses `environment:` per matrix entry so each runs against its own deployer credentials.
+- OIDC federated auth deferred — explicit deferral; revisit later for zero-static-credential CI.
+
+**You still need to do (GitHub UI):**
+1. Create three Environments (`dev`, `test`, `prod`) with `prod` requiring 1 reviewer.
+2. Add 5 secrets per Environment (account / user / role / warehouse / private key).
+3. Add the same five secrets at repo level pointing at the DEV deployer (so the no-environment PR plan workflow can run).
+4. Branch protection on `main` requiring the three plan checks.
+Full instructions: `docs/cicd_setup.md`.
+
+---
+
 ## Open Items (Backlog)
 
 - [x] Drop orphaned `SANDBOX.KB.DARK_STAR_PROJECT_{DEV,TEST,PROD}` projects. *(2026-05-22)*
 - [x] **GitHub integration** — Snowflake `GIT REPOSITORY` + initial push + PR-plan workflow. *(2026-05-22)*
 - [ ] Add the five required GitHub repo secrets so the `DCM Plan (PR)` workflow can run.
-- [ ] Create dedicated `DCM_DEPLOYER` Snowflake user + role (key-pair auth) for CI; rotate workflow secrets to use it.
-- [ ] Add auto-deploy DEV workflow on merge to `main`.
-- [ ] Add `workflow_dispatch` PROD deploy with required reviewer.
+- [x] Create dedicated `DCM_DEPLOYER` Snowflake user + role (key-pair auth) for CI; rotate workflow secrets to use it. *(2026-05-22)*
+- [x] Add auto-deploy DEV workflow on merge to `main`. *(2026-05-22)*
+- [x] Add `workflow_dispatch` PROD deploy with required reviewer. *(2026-05-22)*
+- [ ] Configure GitHub Environments + secrets + branch protection (see `docs/cicd_setup.md`).
+- [ ] Move from PAT/key-pair to OIDC federated auth.
+- [ ] Tighten deployer roles — replace SYSADMIN inheritance with a custom umbrella role.
 - [ ] Add seed/sample data loaders for DIM/FACT tables (likely Snowpark or COPY INTO from a public stage).
 - [ ] Layer in dynamic tables for STAGING → ANALYTICS transformations.
 - [ ] Add data quality expectations (`ATTACH DATA METRIC FUNCTION`) on critical fact columns.

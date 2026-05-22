@@ -1,0 +1,104 @@
+name: DCM Deploy PROD
+
+# Triggered after a successful DCM Deploy TEST run on main, OR manually.
+# The `prod` Environment requires a reviewer to approve in the Actions UI
+# before any deploy step runs.
+
+on:
+  workflow_run:
+    workflows: ["DCM Deploy TEST"]
+    types: [completed]
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: dcm-deploy-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy PROD
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: prod          # required reviewer gate is enforced by GitHub
+    env:
+      TARGET: PROD
+      PROJECT: CODE_DB.DCM.DARK_STAR_PROJECT_PROD
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Snowflake CLI
+        run: pip install --upgrade snowflake-cli
+
+      - name: Configure Snowflake JWT connection
+        env:
+          SNOWFLAKE_ACCOUNT:     ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER:        ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_ROLE:        ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_WAREHOUSE:   ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.snowflake
+          umask 077
+          echo "$SNOWFLAKE_PRIVATE_KEY" > ~/.snowflake/dcm_key.p8
+          cat > ~/.snowflake/connections.toml <<EOF
+          [ci]
+          account             = "${SNOWFLAKE_ACCOUNT}"
+          user                = "${SNOWFLAKE_USER}"
+          role                = "${SNOWFLAKE_ROLE}"
+          warehouse           = "${SNOWFLAKE_WAREHOUSE}"
+          authenticator       = "SNOWFLAKE_JWT"
+          private_key_file    = "/home/runner/.snowflake/dcm_key.p8"
+          database            = "CODE_DB"
+          schema              = "DCM"
+          EOF
+          chmod 600 ~/.snowflake/connections.toml
+
+      - name: snow dcm raw-analyze
+        run: snow dcm raw-analyze ${PROJECT} -c ci --target ${TARGET}
+
+      - name: snow dcm plan (preview)
+        run: snow dcm plan ${PROJECT} -c ci --target ${TARGET} --save-output
+
+      - name: Plan summary to job output
+        run: |
+          python - <<'PY'
+          import json, os, collections, pathlib
+          p = pathlib.Path("out/plan/plan_result.json")
+          if not p.exists(): exit(0)
+          d = json.loads(p.read_text())
+          ops = d.get("operations", [])
+          counts = collections.Counter()
+          for o in ops:
+              k = o.get("operationType") or o.get("association") or "OTHER"
+              counts[k] += 1
+          line = f"PROD plan status: {d.get('status','?')} · " + (" · ".join([f"{k}: {v}" for k,v in sorted(counts.items())]) or "no ops")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+              f.write(line + "\n")
+          PY
+
+      - name: snow dcm deploy
+        run: |
+          snow dcm deploy ${PROJECT} -c ci --target ${TARGET} \
+            --alias "prod-${GITHUB_SHA::8}"
+
+      - name: Upload plan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dcm-deploy-prod
+          path: out/
+          retention-days: 30

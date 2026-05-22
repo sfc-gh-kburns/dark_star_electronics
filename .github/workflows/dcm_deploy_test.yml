@@ -1,0 +1,83 @@
+name: DCM Deploy TEST
+
+on:
+  workflow_run:
+    workflows: ["DCM Deploy DEV"]
+    types: [completed]
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: dcm-deploy-test
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy TEST
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    environment: test
+    env:
+      TARGET: TEST
+      PROJECT: CODE_DB.DCM.DARK_STAR_PROJECT_TEST
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Snowflake CLI
+        run: pip install --upgrade snowflake-cli
+
+      - name: Configure Snowflake JWT connection
+        env:
+          SNOWFLAKE_ACCOUNT:     ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER:        ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_ROLE:        ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_WAREHOUSE:   ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.snowflake
+          umask 077
+          echo "$SNOWFLAKE_PRIVATE_KEY" > ~/.snowflake/dcm_key.p8
+          cat > ~/.snowflake/connections.toml <<EOF
+          [ci]
+          account             = "${SNOWFLAKE_ACCOUNT}"
+          user                = "${SNOWFLAKE_USER}"
+          role                = "${SNOWFLAKE_ROLE}"
+          warehouse           = "${SNOWFLAKE_WAREHOUSE}"
+          authenticator       = "SNOWFLAKE_JWT"
+          private_key_file    = "/home/runner/.snowflake/dcm_key.p8"
+          database            = "CODE_DB"
+          schema              = "DCM"
+          EOF
+          chmod 600 ~/.snowflake/connections.toml
+
+      - name: snow dcm raw-analyze
+        run: snow dcm raw-analyze ${PROJECT} -c ci --target ${TARGET}
+
+      - name: snow dcm plan (preview)
+        run: snow dcm plan ${PROJECT} -c ci --target ${TARGET} --save-output
+
+      - name: snow dcm deploy
+        run: |
+          snow dcm deploy ${PROJECT} -c ci --target ${TARGET} \
+            --alias "ci-${GITHUB_SHA::8}"
+
+      - name: Upload plan artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dcm-deploy-test
+          path: out/
+          retention-days: 14

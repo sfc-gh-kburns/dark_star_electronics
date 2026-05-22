@@ -1,34 +1,34 @@
-name: DCM Plan (PR)
+name: DCM Drift Check
 
-# Read-only safety check.
-# On every PR to main, runs `snow dcm raw-analyze` + `snow dcm plan` against
-# DEV / TEST / PROD targets and posts a CREATE/ALTER/DROP summary as a PR comment.
-# NO deploys happen here.
+# Nightly cron + manual trigger.
+# Runs `snow dcm plan` against each env and FAILS if it returns any operations
+# (i.e. someone made an out-of-band change to Snowflake that the repo is unaware of).
+# When drift is detected, opens/updates a GitHub issue.
 
 on:
-  pull_request:
-    branches: [ main ]
+  schedule:
+    - cron: '0 9 * * *'      # 09:00 UTC daily
   workflow_dispatch:
 
 permissions:
   contents: read
-  pull-requests: write
-
-concurrency:
-  group: dcm-plan-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  issues: write
 
 jobs:
-  plan:
-    name: snow dcm plan (${{ matrix.target }})
+  drift:
+    name: Drift check (${{ matrix.target }})
     runs-on: ubuntu-latest
+    environment: ${{ matrix.env_name }}
     strategy:
       fail-fast: false
       matrix:
-        target: [DEV, TEST, PROD]
-
-    env:
-      SNOWFLAKE_CONNECTION_NAME: ci
+        include:
+          - target: DEV
+            env_name: dev
+          - target: TEST
+            env_name: test
+          - target: PROD
+            env_name: prod
 
     steps:
       - name: Checkout
@@ -40,11 +40,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install Snowflake CLI
-        run: |
-          python -m pip install --upgrade pip
-          pip install snowflake-cli
+        run: pip install --upgrade snowflake-cli
 
-      - name: Configure Snowflake JWT connection (DEV deployer for plan)
+      - name: Configure Snowflake JWT connection
         env:
           SNOWFLAKE_ACCOUNT:     ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER:        ${{ secrets.SNOWFLAKE_USER }}
@@ -68,69 +66,64 @@ jobs:
           EOF
           chmod 600 ~/.snowflake/connections.toml
 
-      - name: snow dcm raw-analyze (${{ matrix.target }})
-        run: |
-          snow dcm raw-analyze \
-            CODE_DB.DCM.DARK_STAR_PROJECT_${{ matrix.target }} \
-            -c ci --target ${{ matrix.target }}
-
-      - name: snow dcm plan (${{ matrix.target }})
+      - name: snow dcm plan
         run: |
           snow dcm plan \
             CODE_DB.DCM.DARK_STAR_PROJECT_${{ matrix.target }} \
             -c ci --target ${{ matrix.target }} --save-output
 
-      - name: Build summary
-        id: summarize
+      - name: Detect drift
+        id: drift
         run: |
           python - <<'PY'
-          import json, os, collections, pathlib
+          import json, os, pathlib
           p = pathlib.Path("out/plan/plan_result.json")
           if not p.exists():
-              print("No plan_result.json"); exit(0)
+              print("no plan output"); exit(0)
           d = json.loads(p.read_text())
           ops = d.get("operations", [])
-          counts = collections.Counter()
-          for o in ops:
-              k = o.get("operationType") or o.get("association") or "OTHER"
-              counts[k] += 1
-          line = f"**${{ matrix.target }}** — status: `{d.get('status','?')}` · "
-          line += " · ".join([f"{k}: {v}" for k,v in sorted(counts.items())]) or "no ops"
+          n = len(ops)
+          line = f"${{ matrix.target }} drift: {n} ops"
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
               f.write(line + "\n")
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
-              f.write(f"summary_line<<EOT\n{line}\nEOT\n")
+              f.write(f"count={n}\n")
           PY
 
-      - name: Comment plan summary on PR
-        if: github.event_name == 'pull_request'
+      - name: Open / update issue if drift found
+        if: ${{ steps.drift.outputs.count != '0' }}
         uses: actions/github-script@v7
         with:
           script: |
-            const line = `${{ steps.summarize.outputs.summary_line }}`;
-            const marker = `<!-- dcm-plan-${{ matrix.target }} -->`;
-            const body   = `${marker}\n${line}`;
-            const { data: comments } = await github.rest.issues.listComments({
+            const target = '${{ matrix.target }}';
+            const count  = '${{ steps.drift.outputs.count }}';
+            const title  = `Drift detected in ${target}`;
+            const body   = `Nightly drift check found **${count}** unexpected operation(s) on \`${target}\`.\n\nReview the workflow artifact \`out/plan/plan_result.json\` for details and reconcile the repo with Snowflake.`;
+            const { data: issues } = await github.rest.issues.listForRepo({
               owner: context.repo.owner, repo: context.repo.repo,
-              issue_number: context.issue.number,
+              state: 'open', labels: 'drift',
             });
-            const existing = comments.find(c => c.body && c.body.includes(marker));
+            const existing = issues.find(i => i.title === title);
             if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner, repo: context.repo.repo,
-                comment_id: existing.id, body,
-              });
-            } else {
               await github.rest.issues.createComment({
                 owner: context.repo.owner, repo: context.repo.repo,
-                issue_number: context.issue.number, body,
+                issue_number: existing.number, body,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner: context.repo.owner, repo: context.repo.repo,
+                title, body, labels: ['drift'],
               });
             }
+
+      - name: Fail job if drift detected
+        if: ${{ steps.drift.outputs.count != '0' }}
+        run: exit 1
 
       - name: Upload plan artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dcm-plan-${{ matrix.target }}
-          path: out/plan/
+          name: drift-${{ matrix.target }}
+          path: out/
           retention-days: 14

@@ -528,6 +528,52 @@ snow dcm deploy CODE_DB.DCM.DARK_STAR_PROJECT_PROD --target PROD --alias v0.1.0<
 
   <!-- ============================================================ -->
   <section>
+    <h2><span class="num">11</span>CI/CD Pipeline (GitHub Actions)</h2>
+    <div class="step">
+      <p><strong>What:</strong> Five GitHub Actions workflows wired to per-environment Snowflake
+        service users with RSA key-pair JWT auth, gated by GitHub Environments. PROD requires
+        an explicit reviewer approval before deploying.</p>
+      <div class="why"><strong>Why:</strong> A push to <code>main</code> should flow safely
+        through DEV → TEST → PROD without any human running <code>snow dcm deploy</code>, and a
+        leaked DEV key must never be able to touch PROD. Drift detection catches anything that
+        bypasses the pipeline.</div>
+
+      <h3>Workflows</h3>
+      <table>
+        <thead><tr><th>Workflow</th><th>Trigger</th><th>Environment</th><th>Approval</th></tr></thead>
+        <tbody>
+          <tr><td><code>dcm_plan.yml</code></td><td>PR to <code>main</code></td><td>—</td><td>Read-only · PR comment</td></tr>
+          <tr><td><code>dcm_deploy_dev.yml</code></td><td>push to <code>main</code></td><td><code>dev</code></td><td>none</td></tr>
+          <tr><td><code>dcm_deploy_test.yml</code></td><td>after DEV success</td><td><code>test</code></td><td>none</td></tr>
+          <tr><td><code>dcm_deploy_prod.yml</code></td><td>after TEST success</td><td><code>prod</code></td><td class="alter"><strong>required reviewer</strong></td></tr>
+          <tr><td><code>dcm_drift.yml</code></td><td>nightly 09:00 UTC</td><td>per-env</td><td>opens issue on drift</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Auth model</h3>
+      <ul>
+        <li>Three <code>TYPE = SERVICE</code> Snowflake users — <code>DCM_DEPLOYER_DEV/TEST/PROD</code> — interactive password login disabled.</li>
+        <li>RSA key-pair JWT auth (<code>SNOWFLAKE_JWT</code>); private keys stored only as GitHub Environment secrets.</li>
+        <li>Per-env role owns its database, warehouse, schemas, tables, views, db roles, and the matching <code>WAREHOUSE_USER</code> account role.</li>
+        <li>OIDC federated auth deferred — clean follow-up.</li>
+      </ul>
+
+      <h3>Promotion flow</h3>
+<pre><code>PR opened ───► dcm_plan.yml (DEV / TEST / PROD)  ── posts CREATE/ALTER/DROP comment
+                              │
+                              ▼
+PR merged to main ──► dcm_deploy_dev.yml      (auto)
+                              │
+                              ▼ on success
+                       dcm_deploy_test.yml    (auto)
+                              │
+                              ▼ on success
+                       dcm_deploy_prod.yml    (REQUIRES APPROVAL)</code></pre>
+    </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <section>
     <h2><span class="num">→</span>Next Up</h2>
     <div class="step">
       <ul>

@@ -16,6 +16,7 @@ deployment_history*.json
 
 # ---------- Secrets / credentials -------------------------------------------
 # Never commit credentials or local connection profiles
+keys/
 .env
 .env.*
 !.env.example
