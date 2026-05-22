@@ -135,12 +135,55 @@ snow dcm drop SANDBOX.KB.DARK_STAR_PROJECT_PROD -c kb_demo
 
 ---
 
+## 2026-05-22 — GitHub integration foundation
+
+**Task:** Wire the project to a private GitHub repo on both sides — Snowflake `GIT REPOSITORY` object backed by a PAT secret, plus initial push of local source, plus a PR-only GitHub Actions plan workflow.
+
+**Why:** Source-of-truth in Git enables PR review, history, rollback, and CI/CD. The Snowflake `GIT REPOSITORY` makes the same source available inside Snowsight (useful for Streamlit-in-Snowflake / notebooks later). Read-only PR plans give us a safety net before any merge touches infrastructure.
+
+**How:**
+- Created `CODE_DB.INTEGRATIONS` schema (already existed).
+- Created account-level `GITHUB_API_INTEGRATION` (provider `GIT_HTTPS_API`, prefix `https://github.com/sfc-gh-kburns/`) and authorized the secret via `ALLOWED_AUTHENTICATION_SECRETS`.
+- User created `CODE_DB.INTEGRATIONS.GITHUB_PAT_DARKSTAR` as `TYPE = PASSWORD`, username `sfc-gh-kburns` (an earlier `GENERIC_STRING` secret was rejected by `GIT REPOSITORY`).
+- Created `CODE_DB.INTEGRATIONS.GITHUB_DARK_STAR` GIT REPOSITORY pointing at `https://github.com/sfc-gh-kburns/dark_star_electronics.git`. First clone failed (PAT scope/auth); succeeded after user re-authorized the PAT.
+- `git remote add origin ... && git pull --rebase --allow-unrelated-histories && git push -u origin main` — initial commit `cd0842c`, on `origin/main` after rebase as `82359ed`.
+- Added `.github/workflows/dcm_plan.yml`: matrix over DEV/TEST/PROD running `raw-analyze` + `plan --save-output`, uploads `out/plan/` as artifact. Triggers: `pull_request` on `main`, `workflow_dispatch`.
+
+**Outcome:**
+- `SHOW GIT BRANCHES IN CODE_DB.INTEGRATIONS.GITHUB_DARK_STAR` returns `main` at `82359ed…` ✅
+- Local repo pushed to GitHub.
+- CI workflow committed; will start running once required secrets are added.
+
+**Notes / Decisions:**
+- `GIT REPOSITORY` requires `TYPE = PASSWORD` secrets — `GENERIC_STRING` is rejected. Worth noting for future onboardings.
+- Authentication is a PAT today. Eventually we'll move to a dedicated `DCM_DEPLOYER` Snowflake user with key-pair auth used by Actions, and an OAuth/app-token approach for Snowflake → GitHub if needed.
+- CI is **read-only** by design (no deploy yet). Auto-deploy DEV / approved PROD deploys are explicit follow-ups.
+
+**Required GitHub repo secrets** (Settings → Secrets and variables → Actions → New repository secret):
+
+| Secret | Value |
+| --- | --- |
+| `SNOWFLAKE_ACCOUNT` | `SFSENORTHAMERICA-DEMO462` |
+| `SNOWFLAKE_USER` | `kburns` (interim; replace with `DCM_DEPLOYER` later) |
+| `SNOWFLAKE_PASSWORD` | (account password / will swap for `SNOWFLAKE_PRIVATE_KEY`) |
+| `SNOWFLAKE_ROLE` | `ACCOUNTADMIN` (interim; tighten later) |
+| `SNOWFLAKE_WAREHOUSE` | `D4B_WH` |
+
+Verify the workflow:
+```bash
+# After secrets are added, push a trivial branch and open a PR — Actions tab will show three matrix jobs.
+```
+
+---
+
 ## Open Items (Backlog)
 
 - [x] Drop orphaned `SANDBOX.KB.DARK_STAR_PROJECT_{DEV,TEST,PROD}` projects. *(2026-05-22)*
-- [ ] **GitHub integration** — pick one:
-  - Snowflake `GIT REPOSITORY` integration (run `snow dcm` from Snowsight), or
-  - GitHub Actions CI/CD (`plan` on PR, `deploy` on merge to `main`, separate creds per env).
+- [x] **GitHub integration** — Snowflake `GIT REPOSITORY` + initial push + PR-plan workflow. *(2026-05-22)*
+- [ ] Add the five required GitHub repo secrets so the `DCM Plan (PR)` workflow can run.
+- [ ] Create dedicated `DCM_DEPLOYER` Snowflake user + role (key-pair auth) for CI; rotate workflow secrets to use it.
+- [ ] Add auto-deploy DEV workflow on merge to `main`.
+- [ ] Add `workflow_dispatch` PROD deploy with required reviewer.
 - [ ] Add seed/sample data loaders for DIM/FACT tables (likely Snowpark or COPY INTO from a public stage).
 - [ ] Layer in dynamic tables for STAGING → ANALYTICS transformations.
 - [ ] Add data quality expectations (`ATTACH DATA METRIC FUNCTION`) on critical fact columns.

@@ -1,0 +1,88 @@
+name: DCM Plan (PR)
+
+# Read-only safety check: runs `snow dcm raw-analyze` and `snow dcm plan`
+# against DEV, TEST, and PROD targets on every pull request to main.
+# Plan output is uploaded as an artifact for reviewer inspection.
+# This workflow performs NO deployments.
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:        # allow manual runs from the Actions tab
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  plan:
+    name: snow dcm plan (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [DEV, TEST, PROD]
+
+    env:
+      SNOWFLAKE_CONNECTION_NAME: ci
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Snowflake CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install snowflake-cli
+
+      - name: Configure Snowflake connection
+        env:
+          SNOWFLAKE_ACCOUNT:   ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER:      ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD:  ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ROLE:      ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+        run: |
+          mkdir -p ~/.snowflake
+          cat > ~/.snowflake/connections.toml <<EOF
+          [ci]
+          account     = "${SNOWFLAKE_ACCOUNT}"
+          user        = "${SNOWFLAKE_USER}"
+          password    = "${SNOWFLAKE_PASSWORD}"
+          role        = "${SNOWFLAKE_ROLE}"
+          warehouse   = "${SNOWFLAKE_WAREHOUSE}"
+          database    = "CODE_DB"
+          schema      = "DCM"
+          EOF
+          chmod 600 ~/.snowflake/connections.toml
+
+      - name: snow --version
+        run: snow --version
+
+      - name: snow dcm raw-analyze (${{ matrix.target }})
+        run: |
+          snow dcm raw-analyze \
+            CODE_DB.DCM.DARK_STAR_PROJECT_${{ matrix.target }} \
+            -c ci \
+            --target ${{ matrix.target }}
+
+      - name: snow dcm plan (${{ matrix.target }})
+        run: |
+          snow dcm plan \
+            CODE_DB.DCM.DARK_STAR_PROJECT_${{ matrix.target }} \
+            -c ci \
+            --target ${{ matrix.target }} \
+            --save-output
+
+      - name: Upload plan output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dcm-plan-${{ matrix.target }}
+          path: out/plan/
+          retention-days: 14
