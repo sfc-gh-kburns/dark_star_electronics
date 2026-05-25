@@ -71,3 +71,6 @@ Swap `_DEV` / `--target DEV` for `_TEST` or `_PROD` for the other environments.
 3. **GitHub integration (follow-up)** — choose one:
    - **Snowflake `GIT REPOSITORY` integration**: create `API INTEGRATION` for github.com, then `CREATE GIT REPOSITORY` pointing at this repo so DCM commands can run from Snowsight.
    - **GitHub Actions CI/CD**: workflow that runs `snow dcm plan` on PR and `snow dcm deploy` on merge to `main`, with separate jobs/credentials per target.
+
+
+THE END
