@@ -22,10 +22,17 @@ jobs:
   plan:
     name: snow dcm plan (${{ matrix.target }})
     runs-on: ubuntu-latest
+    environment: ${{ matrix.env_name }}
     strategy:
       fail-fast: false
       matrix:
-        target: [DEV, TEST, PROD]
+        include:
+          - target: DEV
+            env_name: dev
+          - target: TEST
+            env_name: test
+          - target: PROD
+            env_name: prod
 
     env:
       SNOWFLAKE_CONNECTION_NAME: ci
@@ -44,7 +51,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install snowflake-cli
 
-      - name: Configure Snowflake JWT connection (DEV deployer for plan)
+      - name: Configure Snowflake JWT connection (${{ matrix.target }} deployer)
         env:
           SNOWFLAKE_ACCOUNT:     ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER:        ${{ secrets.SNOWFLAKE_USER }}
@@ -67,6 +74,10 @@ jobs:
           schema              = "DCM"
           EOF
           chmod 600 ~/.snowflake/connections.toml
+
+      - name: Verify Snowflake identity
+        run: |
+          snow sql -c ci -q "SELECT CURRENT_USER() AS \"user\", CURRENT_ROLE() AS \"role\", CURRENT_WAREHOUSE() AS \"wh\""
 
       - name: snow dcm raw-analyze (${{ matrix.target }})
         run: |
