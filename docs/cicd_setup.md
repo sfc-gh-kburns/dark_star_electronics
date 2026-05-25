@@ -148,65 +148,51 @@ Incoming request with IP/Token x.x.x.x is not allowed to access Snowflake.
 
 Two production-grade options:
 
-**A. Allowlist GitHub-hosted runner ranges** (simplest, but a large IP range)
+**A. Allowlist GitHub-hosted runner ranges** — fully automated via a Snowflake task
 
-GitHub publishes its runner IP ranges at `https://api.github.com/meta` (the `actions` array). Build the network rule, wrap it in a network policy, and attach the policy to each deployer user (user-level policy overrides any account-level policy).
+A self-refreshing implementation lives in [`sql/network_policy/github_actions_network_policy.sql`](../sql/network_policy/github_actions_network_policy.sql). It creates everything in `CODE_DB.INTEGRATIONS`:
 
-```sql
-USE ROLE ACCOUNTADMIN;
+| Object | Purpose |
+|---|---|
+| `NETWORK RULE GITHUB_API_EGRESS` | lets the procedure call `api.github.com` |
+| `EXTERNAL ACCESS INTEGRATION GITHUB_API_ACCESS` | wraps the egress rule |
+| `NETWORK RULE GITHUB_ACTIONS_RUNNERS` | the ingress allowlist (auto-populated) |
+| `NETWORK POLICY GITHUB_ACTIONS_POLICY` | what gets attached to users |
+| `PROCEDURE REFRESH_GITHUB_ACTIONS_IPS()` | fetches `api.github.com/meta`, parses `.actions`, replaces the rule's `VALUE_LIST` |
+| `TASK TASK_REFRESH_GITHUB_ACTIONS_IPS` | runs the procedure daily at 08:00 UTC (created **suspended**) |
 
--- 1. Pull current ranges:
---    curl -s https://api.github.com/meta | jq -r '.actions[]'
---    Format the result as a comma-separated CIDR list and paste below.
+**Run once** (as `ACCOUNTADMIN`):
 
--- 2. Network rule = the IP allowlist for GitHub Actions runners
-CREATE OR REPLACE NETWORK RULE CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS
-    TYPE       = IPV4
-    MODE       = INGRESS
-    VALUE_LIST = (
-        '4.0.0.0/8',         -- replace with the actual ranges from api.github.com/meta
-        '13.64.0.0/11',
-        '20.0.0.0/8',
-        '40.64.0.0/10',
-        '52.0.0.0/8',
-        '104.40.0.0/13'
-        -- ... full list will be ~150 CIDRs
-    )
-    COMMENT    = 'GitHub-hosted Actions runner egress IP ranges (refresh from api.github.com/meta)';
-
--- 3. Network policy = bundles one or more rules; this is what attaches to a user
-CREATE OR REPLACE NETWORK POLICY GITHUB_ACTIONS_POLICY
-    ALLOWED_NETWORK_RULE_LIST = ('CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS')
-    COMMENT = 'Allow GitHub Actions runners (CI/CD service users only)';
-
--- 4. Attach to each deployer user (user-level policy beats account-level)
-ALTER USER DCM_DEPLOYER_DEV  SET NETWORK_POLICY = GITHUB_ACTIONS_POLICY;
-ALTER USER DCM_DEPLOYER_TEST SET NETWORK_POLICY = GITHUB_ACTIONS_POLICY;
-ALTER USER DCM_DEPLOYER_PROD SET NETWORK_POLICY = GITHUB_ACTIONS_POLICY;
-
--- 5. Verify
-SHOW PARAMETERS LIKE 'NETWORK_POLICY' FOR USER DCM_DEPLOYER_DEV;
-DESCRIBE NETWORK POLICY GITHUB_ACTIONS_POLICY;
+```bash
+snow sql -f sql/network_policy/github_actions_network_policy.sql -c kb_demo
 ```
 
-**Refreshing when GitHub rotates ranges:**
+The script also runs `CALL REFRESH_GITHUB_ACTIONS_IPS()` once and attaches `GITHUB_ACTIONS_POLICY` to all three deployer users — so the pipeline is unblocked the moment it finishes.
+
+**Resume the daily refresh task when you're ready:**
 
 ```sql
--- Replace the entire VALUE_LIST in the rule (additive UPDATE not supported)
-ALTER NETWORK RULE CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS
-    SET VALUE_LIST = ( '<new CIDR>', '<new CIDR>', ... );
+ALTER TASK CODE_DB.INTEGRATIONS.TASK_REFRESH_GITHUB_ACTIONS_IPS RESUME;
 ```
 
-Automation: a small scheduled task (or GitHub Actions workflow itself) can fetch `api.github.com/meta`, format the JSON, and run the `ALTER NETWORK RULE` via Snowflake CLI. Re-run weekly.
+**Manual refresh anytime:**
 
-**To remove later** (e.g., when switching to self-hosted runners):
+```sql
+CALL CODE_DB.INTEGRATIONS.REFRESH_GITHUB_ACTIONS_IPS();
+```
+
+**To remove later** (e.g., switching to self-hosted runners):
 
 ```sql
 ALTER USER DCM_DEPLOYER_DEV  UNSET NETWORK_POLICY;
 ALTER USER DCM_DEPLOYER_TEST UNSET NETWORK_POLICY;
 ALTER USER DCM_DEPLOYER_PROD UNSET NETWORK_POLICY;
-DROP NETWORK POLICY GITHUB_ACTIONS_POLICY;
-DROP NETWORK RULE   CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS;
+DROP TASK             CODE_DB.INTEGRATIONS.TASK_REFRESH_GITHUB_ACTIONS_IPS;
+DROP PROCEDURE        CODE_DB.INTEGRATIONS.REFRESH_GITHUB_ACTIONS_IPS();
+DROP NETWORK POLICY   GITHUB_ACTIONS_POLICY;
+DROP NETWORK RULE     CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS;
+DROP EXTERNAL ACCESS INTEGRATION GITHUB_API_ACCESS;
+DROP NETWORK RULE     CODE_DB.INTEGRATIONS.GITHUB_API_EGRESS;
 ```
 
 **B. Self-hosted runners on a known IP** (recommended long-term)
