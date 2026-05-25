@@ -1,0 +1,191 @@
+name: Cortex AI Code Review (PR)
+
+# Runs on every PR to main. Sends the PR diff to Snowflake Cortex AI_COMPLETE
+# for review and posts the response as a PR comment. Read-only — never deploys.
+
+on:
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: cortex-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: Cortex AI review
+    runs-on: ubuntu-latest
+    environment: dev
+
+    env:
+      SNOWFLAKE_CONNECTION_NAME: ci
+      CORTEX_MODEL: claude-opus-4-7
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Snowflake CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install snowflake-cli
+
+      - name: Configure Snowflake JWT connection
+        env:
+          SNOWFLAKE_ACCOUNT:     ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER:        ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_ROLE:        ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_WAREHOUSE:   ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/.snowflake
+          umask 077
+          printf "%s" "$SNOWFLAKE_PRIVATE_KEY" | base64 -d > ~/.snowflake/dcm_key.p8
+          cat > ~/.snowflake/connections.toml <<EOF
+          [ci]
+          account             = "${SNOWFLAKE_ACCOUNT}"
+          user                = "${SNOWFLAKE_USER}"
+          role                = "${SNOWFLAKE_ROLE}"
+          warehouse           = "${SNOWFLAKE_WAREHOUSE}"
+          authenticator       = "SNOWFLAKE_JWT"
+          private_key_file    = "/home/runner/.snowflake/dcm_key.p8"
+          database            = "CODE_DB"
+          schema              = "DCM"
+          EOF
+          chmod 600 ~/.snowflake/connections.toml
+
+      - name: Build PR diff
+        id: diff
+        run: |
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          if [ -z "$BASE_SHA" ]; then
+            BASE_SHA=$(git rev-parse origin/main)
+            HEAD_SHA=$(git rev-parse HEAD)
+          fi
+          git diff --no-color "$BASE_SHA" "$HEAD_SHA" \
+            -- ':!docs/**' ':!*.md' ':!keys/**' \
+            > /tmp/pr.diff || true
+          # Cap at ~120k chars to stay within model context
+          head -c 120000 /tmp/pr.diff > /tmp/pr.diff.capped
+          wc -c /tmp/pr.diff.capped
+          if [ ! -s /tmp/pr.diff.capped ]; then
+            echo "empty=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "empty=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run Cortex review
+        if: steps.diff.outputs.empty != 'true'
+        env:
+          MODEL: ${{ env.CORTEX_MODEL }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, pathlib, textwrap
+          model = os.environ["MODEL"]
+          diff = pathlib.Path("/tmp/pr.diff.capped").read_text()
+
+          instructions = textwrap.dedent("""\
+            You are a senior Snowflake / DCM / data-engineering code reviewer.
+            The repo manages Snowflake infrastructure-as-code with DCM (manifest_version 2),
+            Jinja templating, persona-based roles, and GitHub Actions CI/CD.
+
+            Review the diff for:
+              1. Snowflake SQL correctness (DEFINE syntax, role grants, warehouse usage).
+              2. Security issues (committed secrets, over-privileged grants, public roles).
+              3. CI/CD safety (workflow injection, secret handling, missing approvals).
+              4. Best practices (naming, idempotency, drift risk).
+
+            Output format (markdown):
+              ### Summary
+              one-line verdict
+              ### Findings
+              bulleted, each with severity [BLOCKER|WARNING|NIT] and file:line if known
+              ### Suggestions
+              optional improvements
+            Be concise. Skip praise. If the diff is trivial say so.
+          """).strip()
+
+          prompt = instructions + "\n\nReview the following PR diff:\n\n```diff\n" + diff + "\n```"
+
+          sql = (
+              "SELECT AI_COMPLETE("
+              f"  '{model}',"
+              "  $$" + prompt.replace("$$", "$ $") + "$$,"
+              "  {'max_tokens': 4096},"
+              "  NULL,"
+              "  FALSE"
+              ") AS resp;"
+          )
+          pathlib.Path("/tmp/review.sql").write_text(sql)
+
+          r = subprocess.run(
+              ["snow","sql","-f","/tmp/review.sql","-c","ci","--format","json"],
+              capture_output=True, text=True
+          )
+          if r.returncode != 0:
+              print("STDOUT:", r.stdout)
+              print("STDERR:", r.stderr)
+              raise SystemExit(r.returncode)
+
+          rows = json.loads(r.stdout)
+          text = (rows[0].get("RESP") if rows else "") or "_(no response)_"
+          pathlib.Path("/tmp/review.md").write_text(text)
+          print(text[:2000])
+          PY
+
+      - name: Write review to job summary
+        if: steps.diff.outputs.empty != 'true'
+        env:
+          MODEL: ${{ env.CORTEX_MODEL }}
+        run: |
+          {
+            echo "## Cortex AI review (\`${MODEL}\`)"
+            echo
+            cat /tmp/review.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Comment review on PR
+        if: github.event_name == 'pull_request' && steps.diff.outputs.empty != 'true'
+        uses: actions/github-script@v7
+        env:
+          MODEL: ${{ env.CORTEX_MODEL }}
+        with:
+          script: |
+            const fs = require('fs');
+            const model = process.env.MODEL;
+            const review = fs.readFileSync('/tmp/review.md', 'utf8');
+            const marker = `<!-- cortex-ai-review -->`;
+            const body = `${marker}\n## Cortex AI review (\`${model}\`)\n\n${review}`;
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner, repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: context.issue.number, body,
+              });
+            }
+
+      - name: Skip notice (empty diff)
+        if: steps.diff.outputs.empty == 'true'
+        run: echo "No code changes in scope — skipping Cortex review."
