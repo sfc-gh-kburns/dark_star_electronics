@@ -105,10 +105,14 @@ jobs:
       - name: Comment plan summary on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          SUMMARY_LINE: ${{ steps.summarize.outputs.summary_line }}
+          TARGET: ${{ matrix.target }}
         with:
           script: |
-            const line = `${{ steps.summarize.outputs.summary_line }}`;
-            const marker = `<!-- dcm-plan-${{ matrix.target }} -->`;
+            const line   = process.env.SUMMARY_LINE;
+            const target = process.env.TARGET;
+            const marker = `<!-- dcm-plan-${target} -->`;
             const body   = `${marker}\n${line}`;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner, repo: context.repo.repo,
