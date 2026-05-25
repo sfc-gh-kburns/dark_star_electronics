@@ -149,14 +149,65 @@ Incoming request with IP/Token x.x.x.x is not allowed to access Snowflake.
 Two production-grade options:
 
 **A. Allowlist GitHub-hosted runner ranges** (simplest, but a large IP range)
-- GitHub publishes its runner IP ranges at `https://api.github.com/meta` (the `actions` array).
-- Create/extend a `NETWORK_RULE` and attach to the deployer users:
-  ```sql
-  CREATE NETWORK RULE GITHUB_ACTIONS_RUNNERS
-    TYPE = IPV4 MODE = INGRESS
-    VALUE_LIST = ('4.x.x.x/16', '20.x.x.x/16', ...);    -- from api.github.com/meta
-  ```
-  Keep it refreshed on a schedule (GitHub publishes updates).
+
+GitHub publishes its runner IP ranges at `https://api.github.com/meta` (the `actions` array). Build the network rule, wrap it in a network policy, and attach the policy to each deployer user (user-level policy overrides any account-level policy).
+
+```sql
+USE ROLE ACCOUNTADMIN;
+
+-- 1. Pull current ranges:
+--    curl -s https://api.github.com/meta | jq -r '.actions[]'
+--    Format the result as a comma-separated CIDR list and paste below.
+
+-- 2. Network rule = the IP allowlist for GitHub Actions runners
+CREATE OR REPLACE NETWORK RULE CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS
+    TYPE       = IPV4
+    MODE       = INGRESS
+    VALUE_LIST = (
+        '4.0.0.0/8',         -- replace with the actual ranges from api.github.com/meta
+        '13.64.0.0/11',
+        '20.0.0.0/8',
+        '40.64.0.0/10',
+        '52.0.0.0/8',
+        '104.40.0.0/13'
+        -- ... full list will be ~150 CIDRs
+    )
+    COMMENT    = 'GitHub-hosted Actions runner egress IP ranges (refresh from api.github.com/meta)';
+
+-- 3. Network policy = bundles one or more rules; this is what attaches to a user
+CREATE OR REPLACE NETWORK POLICY GITHUB_ACTIONS_POLICY
+    ALLOWED_NETWORK_RULE_LIST = ('CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS')
+    COMMENT = 'Allow GitHub Actions runners (CI/CD service users only)';
+
+-- 4. Attach to each deployer user (user-level policy beats account-level)
+ALTER USER DCM_DEPLOYER_DEV  SET NETWORK_POLICY = GITHUB_ACTIONS_POLICY;
+ALTER USER DCM_DEPLOYER_TEST SET NETWORK_POLICY = GITHUB_ACTIONS_POLICY;
+ALTER USER DCM_DEPLOYER_PROD SET NETWORK_POLICY = GITHUB_ACTIONS_POLICY;
+
+-- 5. Verify
+SHOW PARAMETERS LIKE 'NETWORK_POLICY' FOR USER DCM_DEPLOYER_DEV;
+DESCRIBE NETWORK POLICY GITHUB_ACTIONS_POLICY;
+```
+
+**Refreshing when GitHub rotates ranges:**
+
+```sql
+-- Replace the entire VALUE_LIST in the rule (additive UPDATE not supported)
+ALTER NETWORK RULE CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS
+    SET VALUE_LIST = ( '<new CIDR>', '<new CIDR>', ... );
+```
+
+Automation: a small scheduled task (or GitHub Actions workflow itself) can fetch `api.github.com/meta`, format the JSON, and run the `ALTER NETWORK RULE` via Snowflake CLI. Re-run weekly.
+
+**To remove later** (e.g., when switching to self-hosted runners):
+
+```sql
+ALTER USER DCM_DEPLOYER_DEV  UNSET NETWORK_POLICY;
+ALTER USER DCM_DEPLOYER_TEST UNSET NETWORK_POLICY;
+ALTER USER DCM_DEPLOYER_PROD UNSET NETWORK_POLICY;
+DROP NETWORK POLICY GITHUB_ACTIONS_POLICY;
+DROP NETWORK RULE   CODE_DB.INTEGRATIONS.GITHUB_ACTIONS_RUNNERS;
+```
 
 **B. Self-hosted runners on a known IP** (recommended long-term)
 - Run a small VM (e.g. EC2/Azure VM) inside your network with a static egress IP.
