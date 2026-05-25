@@ -66,9 +66,6 @@ jobs:
           EOF
           chmod 600 ~/.snowflake/connections.toml
 
-      - name: Verify Snowflake identity
-        run: |
-          snow sql -c ci -q "SELECT CURRENT_USER() AS \"user\", CURRENT_ROLE() AS \"role\", CURRENT_WAREHOUSE() AS \"wh\""
 
       - name: snow dcm plan
         run: |
