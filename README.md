@@ -74,3 +74,4 @@ Swap `_DEV` / `--target DEV` for `_TEST` or `_PROD` for the other environments.
 
 
 THE END
+< ci smoke test 2026-05-25 -->
