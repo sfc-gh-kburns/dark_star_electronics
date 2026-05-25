@@ -52,7 +52,7 @@ jobs:
         run: |
           mkdir -p ~/.snowflake
           umask 077
-          echo "$SNOWFLAKE_PRIVATE_KEY" > ~/.snowflake/dcm_key.p8
+          printf "%s" "$SNOWFLAKE_PRIVATE_KEY" | base64 -d > ~/.snowflake/dcm_key.p8
           cat > ~/.snowflake/connections.toml <<EOF
           [ci]
           account             = "${SNOWFLAKE_ACCOUNT}"
@@ -65,6 +65,7 @@ jobs:
           schema              = "DCM"
           EOF
           chmod 600 ~/.snowflake/connections.toml
+
 
       - name: snow dcm plan
         run: |
@@ -93,10 +94,13 @@ jobs:
       - name: Open / update issue if drift found
         if: ${{ steps.drift.outputs.count != '0' }}
         uses: actions/github-script@v7
+        env:
+          TARGET: ${{ matrix.target }}
+          COUNT: ${{ steps.drift.outputs.count }}
         with:
           script: |
-            const target = '${{ matrix.target }}';
-            const count  = '${{ steps.drift.outputs.count }}';
+            const target = process.env.TARGET;
+            const count  = process.env.COUNT;
             const title  = `Drift detected in ${target}`;
             const body   = `Nightly drift check found **${count}** unexpected operation(s) on \`${target}\`.\n\nReview the workflow artifact \`out/plan/plan_result.json\` for details and reconcile the repo with Snowflake.`;
             const { data: issues } = await github.rest.issues.listForRepo({

@@ -22,10 +22,17 @@ jobs:
   plan:
     name: snow dcm plan (${{ matrix.target }})
     runs-on: ubuntu-latest
+    environment: ${{ matrix.env_name }}
     strategy:
       fail-fast: false
       matrix:
-        target: [DEV, TEST, PROD]
+        include:
+          - target: DEV
+            env_name: dev
+          - target: TEST
+            env_name: test
+          - target: PROD
+            env_name: prod
 
     env:
       SNOWFLAKE_CONNECTION_NAME: ci
@@ -44,7 +51,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install snowflake-cli
 
-      - name: Configure Snowflake JWT connection (DEV deployer for plan)
+      - name: Configure Snowflake JWT connection (${{ matrix.target }} deployer)
         env:
           SNOWFLAKE_ACCOUNT:     ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER:        ${{ secrets.SNOWFLAKE_USER }}
@@ -54,7 +61,7 @@ jobs:
         run: |
           mkdir -p ~/.snowflake
           umask 077
-          echo "$SNOWFLAKE_PRIVATE_KEY" > ~/.snowflake/dcm_key.p8
+          printf "%s" "$SNOWFLAKE_PRIVATE_KEY" | base64 -d > ~/.snowflake/dcm_key.p8
           cat > ~/.snowflake/connections.toml <<EOF
           [ci]
           account             = "${SNOWFLAKE_ACCOUNT}"
@@ -67,6 +74,7 @@ jobs:
           schema              = "DCM"
           EOF
           chmod 600 ~/.snowflake/connections.toml
+
 
       - name: snow dcm raw-analyze (${{ matrix.target }})
         run: |
@@ -105,10 +113,14 @@ jobs:
       - name: Comment plan summary on PR
         if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
+        env:
+          SUMMARY_LINE: ${{ steps.summarize.outputs.summary_line }}
+          TARGET: ${{ matrix.target }}
         with:
           script: |
-            const line = `${{ steps.summarize.outputs.summary_line }}`;
-            const marker = `<!-- dcm-plan-${{ matrix.target }} -->`;
+            const line   = process.env.SUMMARY_LINE;
+            const target = process.env.TARGET;
+            const marker = `<!-- dcm-plan-${target} -->`;
             const body   = `${marker}\n${line}`;
             const { data: comments } = await github.rest.issues.listComments({
               owner: context.repo.owner, repo: context.repo.repo,

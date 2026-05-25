@@ -53,7 +53,7 @@ jobs:
         run: |
           mkdir -p ~/.snowflake
           umask 077
-          echo "$SNOWFLAKE_PRIVATE_KEY" > ~/.snowflake/dcm_key.p8
+          printf "%s" "$SNOWFLAKE_PRIVATE_KEY" | base64 -d > ~/.snowflake/dcm_key.p8
           cat > ~/.snowflake/connections.toml <<EOF
           [ci]
           account             = "${SNOWFLAKE_ACCOUNT}"
@@ -66,6 +66,7 @@ jobs:
           schema              = "DCM"
           EOF
           chmod 600 ~/.snowflake/connections.toml
+
 
       - name: snow dcm raw-analyze
         run: snow dcm raw-analyze ${PROJECT} -c ci --target ${TARGET}
