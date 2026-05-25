@@ -59,23 +59,11 @@ Per-environment values:
 
 ---
 
-## 3. Add **Repository-level** secrets (REQUIRED — for the PR plan workflow)
+## 3. Repository-level secrets — NOT NEEDED
 
-The `dcm_plan.yml` workflow runs on PRs without an `environment:` block, so it can **only see repository-level secrets**, not environment ones. Without this step, the PR plan check will fail with `Private key provided is not in PKCS#8 format` (because the secret resolves to empty).
+Earlier versions of these workflows fell back to repo-level secrets for the PR plan job. As of `b2c35de`, every job in every workflow declares `environment: dev|test|prod`, so **repo-level secrets are not used**.
 
-Go to **Settings → Secrets and variables → Actions → Repository secrets → New repository secret** and add the same five secrets, **pointing at the DEV deployer** (least privilege — plan is read-only):
-
-| Secret | Value |
-|---|---|
-| `SNOWFLAKE_ACCOUNT` | `SFSENORTHAMERICA-DEMO462` |
-| `SNOWFLAKE_USER` | `DCM_DEPLOYER_DEV` |
-| `SNOWFLAKE_ROLE` | `DCM_DEPLOYER_DEV_ROLE` |
-| `SNOWFLAKE_WAREHOUSE` | `DARK_STAR_DEV_WH` |
-| `SNOWFLAKE_PRIVATE_KEY` | output of `base64 -i keys/dcm_deployer_dev.p8 \| pbcopy` (same value as the `dev` env secret) |
-
-Direct URL: `https://github.com/sfc-gh-kburns/dark_star_electronics/settings/secrets/actions`
-
-> **Why both?** Environment secrets are scoped to jobs that declare `environment:`. Repository secrets are visible to every workflow. The deploy workflows pull from environments (least-privilege per env). The PR plan workflow falls back to repo-level (DEV credentials only).
+If you previously added them, you can delete them: **Settings → Secrets and variables → Actions → Repository secrets**, remove all five `SNOWFLAKE_*` entries. Cleaner security posture (no idle DEV-deployer key sitting at repo scope).
 
 ---
 
